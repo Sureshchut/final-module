@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "hardhat/console.sol";
+
+contract BiriyaniToken is ERC20, Ownable, ERC20Burnable {
+    event LogMessage(string message);
+    event BiriyaniRedeemed(address indexed account, string biriyaniType, uint256 portion);
+
+    struct Biriyani {
+        uint256 price;
+        uint256 portion;
+    }
+
+    mapping(string => Biriyani) public biriyaniTypes;
+    mapping(address => mapping(string => uint256)) public redeemedPortions;
+    mapping(address => string) public lastRedeemed;
+
+    constructor(
+        uint256 chickenBiriyaniPrice,
+        uint256 muttonBiriyaniPrice,
+        uint256 chickenBiriyaniPortion,
+        uint256 muttonBiriyaniPortion
+    ) ERC20("BIRIYANI", "BRY") Ownable(msg.sender) {
+        _addBiriyani("Chicken Biriyani", chickenBiriyaniPrice, chickenBiriyaniPortion);
+        _addBiriyani("Mutton Biriyani", muttonBiriyaniPrice, muttonBiriyaniPortion);
+    }
+
+    function _addBiriyani(string memory biriyaniType, uint256 price, uint256 portion) internal onlyOwner {
+        biriyaniTypes[biriyaniType] = Biriyani(price, portion);
+    }
+
+    function mint(address account, uint256 amount) external onlyOwner {
+        _mint(account, amount);
+    }
+
+    function transferTokens(address recipient, uint256 amount) external {
+        require(balanceOf(msg.sender) >= amount, "Not enough funds to transfer");
+        _transfer(msg.sender, recipient, amount);
+        emit Transfer(msg.sender, recipient, amount);
+    }
+
+    function redeemBiriyani(string memory biriyaniType, uint256 portion) external {
+        Biriyani storage biriyani = biriyaniTypes[biriyaniType];
+        require(biriyani.price > 0, "Biriyani type does not exist");
+        require(balanceOf(msg.sender) >= biriyani.price * portion, "Insufficient tokens to redeem biriyani");
+        require(biriyani.portion >= portion, "Insufficient biriyani portion available");
+
+        // Update state variables in a single transaction to save gas
+        _burn(msg.sender, biriyani.price * portion);
+        lastRedeemed[msg.sender] = biriyaniType; // Update with the latest redeemed biriyani type
+        redeemedPortions[msg.sender][biriyaniType] += portion;
+        emit BiriyaniRedeemed(msg.sender, biriyaniType, portion);
+    }
+
+    function burnTokens(uint256 amount) external {
+        require(balanceOf(msg.sender) >= amount, "Not enough tokens to burn");
+        _burn(msg.sender, amount);
+        emit LogMessage("Tokens burned successfully");
+    }
+}
